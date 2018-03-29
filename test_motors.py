@@ -19,17 +19,18 @@ try:
     millivolts = b.get_battery_level()
     print('Battery level %s mV' % millivolts)
 
-    m_c = Motor(b, PORT_C)
+    m = Motor(b, PORT_A)
 
     powers = range(20, 130, 10)
     times = []
     for power in powers:
         start_time = time.time()
-        m_c.turn(power, 3000)
+        m.turn(power, 200)
+        m.turn(power * -1, 200)
         delta_time = time.time() - start_time
         times.append(delta_time)
 
-    with open('motor_test_3000.csv','w') as file:
+    with open('motor_movment_test_400.csv','w') as file:
         file.write('power,time\n')
         for i in range(len(powers)):
             file.write(str(powers[i]) + ',' + str(times[i]))

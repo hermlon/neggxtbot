@@ -24,9 +24,9 @@ try:
     m_b = Motor(b, PORT_B)
     m_c = Motor(b, PORT_C)
 
-    #g = NeggxtBotGCodeParser(m_c, m_a, m_b)
+    g = NeggxtBotGCodeParser(m_c, m_a, m_b)
 
-    #import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
 
 
     b.sock.close()

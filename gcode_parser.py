@@ -1,5 +1,6 @@
 import math
-import thread
+import _thread
+import time
 
 
 class NeggxtBotGCodeParser:
@@ -38,19 +39,16 @@ class NeggxtBotGCodeParser:
 
     # moves the pen to the (new) posision in self.sets
     def move(self):
-        delta_x = self.sets['X'] - self.x
-        #if delta_x != 0:
-        #    self.m_x.turn(int(delta_x / abs(delta_x)) * 30, abs(self.rotation_by_x(delta_x)))
-        #    self.x += delta_x
-
-        # important! make sure it is in the drawable area
+        # important! make sure the Y coordinate is in the drawable area
         if self.sets['Y'] > self.egg_height or self.sets['Y'] < 0:
             raise GCodeParseError('Y Coordinate out of drawable Area')
         else:
+            delta_x = self.sets['X'] - self.x
+            self.x += delta_x
+
             delta_y = self.sets['Y'] - self.y
-            #if delta_y != 0:
-            #    self.m_y.turn(int(delta_y / abs(delta_y)) * 30, abs(self.movment_by_y(delta_y)))
-            #    self.y += delta_y
+            self.y += delta_y
+
             print('I am moving! deltaX: %s, deltaY: %s' % (delta_x, delta_y))
             self.dual_move(delta_x, delta_y)
 
@@ -59,35 +57,31 @@ class NeggxtBotGCodeParser:
         tacho_y = self.movment_by_y(abs(delta_y))
 
         if delta_x != 0 and delta_y != 0:
-            # tacho_x has a longer distance -> has to move faster -> needs more power -> his power is limited to self.sets['F']
-            if tacho_x > tacho_y:
+            # which one needs more power? the more power you need to drive one tacho degree in a second (=the harder) and the more tacho degrees you have to drive the more power you need -> this larger power is limited to self.sets['F']
+            if self.m_x_func.power_per_time() * tacho_x > self.m_y_func.power_per_time() * tacho_y:
                 power_x = self.sets['F']
-                power_y = self.calc_power_by_tacho(tacho_x, tacho_y, power_x)
+                power_y = self.m_y_func.calc_power_by_tacho(tacho_x, tacho_y, power_x)
             else:
                 power_y = self.sets['F']
-                power_x = self.calc_power_by_tacho(tacho_y, tacho_x, power_y)
+                power_x = self.m_x_func.calc_power_by_tacho(tacho_y, tacho_x, power_y)
 
-            power_x *= int(delta_x) / abs(delta_x)
-            power_y *= int(delta_y) / abs(delta_y)
+            power_x = int(power_x * int(delta_x) / abs(delta_x))
+            power_y = int(power_y * int(delta_y) / abs(delta_y))
 
             #power the motors simultaneously
-            thread.start_new_thread(self.turn_motor, (self.m_x, power_x, tacho_x))
-            thread.start_new_thread(self.turn_motor, (self.m_y, power_y, tacho_y))
+            _thread.start_new_thread(self.turn_motor, (self.m_x, power_x, tacho_x))
+            _thread.start_new_thread(self.turn_motor, (self.m_y, power_y, tacho_y))
+
         else:
             if delta_x != 0:
                 # turn m_x with maximum power
-                self.m_x.turn(self.sets['F'] * int(delta_x) / abs(delta_x), abs(tacho_x))
-            else:
-                self.m_y.turn(self.sets['F'] * int(delta_y) / abs(delta_y), abs(tacho_y))
+                self.m_x.turn(int(self.sets['F'] * int(delta_x) / abs(delta_x)), abs(tacho_x))
+            if delta_y != 0:
+                self.m_y.turn(int(self.sets['F'] * int(delta_y) / abs(delta_y)), abs(tacho_y))
 
-    def turn_motor(motor, power, tacho):
+    def turn_motor(self, motor, power, tacho):
+        print('power: ' + str(power) + ' tacho: ' + str(tacho))
         motor.turn(power, tacho)
-
-    def calc_power_by_tacho(tacho_1, tacho_2, power_1):
-        # constants for the exponential function describing the relation between power and the time needed to reach a certain tacho
-        a = 1.051414
-        m = 10.125
-        return math.log((m * math.pow(a, power_1) + 1.25) * tacho_1 / tacho_2 - 1.25, a)
 
     # returns the tacho degrees the motor has to rotate to draw delta_x cm. The egg is estimated as a cylinder with a constant radius egg_width
     def rotation_by_x(self, delta_x):
@@ -142,6 +136,54 @@ class NeggxtBotGCodeParser:
     # move the pen up to stop drawing
     def pen_up(self):
         self.m_pull.turn(30, self.max_pull_height)
+
+    # finds out the power the motors need to move in a certain time and calculates the parameters of the exponential function
+    def calibrate(self):
+        times = []
+        powers = [30, 60, 120]
+        for power in powers:
+            # m_y
+            start_time = time.time()
+            self.m_y.turn(power, self.max_movement)
+            self.m_y.turn(power * -1, self.max_movement)
+            delta_time_y = time.time() - start_time
+
+            # m_x
+            start_time = time.time()
+            self.m_x.turn(power, self.full_rotation)
+            self.m_x.turn(power * -1, self.full_rotation)
+            delta_time_x = time.time() - start_time
+
+            # scale for 1 tacho degree
+            times.append((delta_time_x / self.full_rotation, delta_time_y / self.max_movement))
+        # pass the corresponding (power, time) tuples to the function generator
+        self.m_x_func = MotorExpFunction([(powers[0], times[0][0]), (powers[1], times[1][0]), (powers[2], times[2][0])])
+        self.m_y_func = MotorExpFunction([(powers[0], times[0][1]), (powers[1], times[1][1]), (powers[2], times[2][1])])
+
+class MotorExpFunction():
+
+    # powertimes: list of three (power, time) tuples
+    def __init__(self, powertimes):
+        self.powertimes = powertimes
+        # the offset in time of the function is the time it took for the largest power
+        self.n = powertimes[-1][1]
+        # Exponential function: t = m * a^p + n
+        # (I)   t_1 = m * a^p_1 + n
+        # (II)   t_2 = m * a^p_2 + n
+        # (t_1 - n) / a^p_1 = (t_2 - n) / a^p_2
+        # (t_1 - n) / (t_2 - n) = a^p_1 / a^p_2
+        # (t_1 - n) / (t_2 - n) = a^(p_1 - p_2)
+        # a = ((t_1 - n) / (t_2 - n))^(1/(p_1 - p_2))
+        self.a = math.pow((powertimes[0][1] - self.n) / (powertimes[1][1] - self.n), 1/(powertimes[0][0] - powertimes[1][0]))
+        # m = (t_1 - n) / (a^p_1)
+        self.m = (powertimes[0][1] - self.n) / math.pow(self.a, powertimes[0][0])
+
+    # power to drive one tacho degree in one second
+    def power_per_time(self):
+        return math.log((1 - self.n) / self.m, self.a)
+
+    def calc_power_by_tacho(self, tacho_1, tacho_2, power_1):
+        return math.log(((self.m * math.pow(self.a, power_1) + self.n) * tacho_1 / tacho_2 - self.n) / self.n, self.a)
 
 class GCodeParseError(Exception):
     pass
