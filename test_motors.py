@@ -2,6 +2,7 @@ import nxt.locator
 import nxt.brick
 from nxt.motor import *
 import time
+import pickle
 
 debug = True
 
@@ -20,21 +21,26 @@ try:
     print('Battery level %s mV' % millivolts)
 
     m = Motor(b, PORT_A)
+    max_tacho = 130
 
-    powers = range(20, 130, 10)
-    times = []
-    for power in powers:
-        start_time = time.time()
-        m.turn(power, 200)
-        m.turn(power * -1, 200)
-        delta_time = time.time() - start_time
-        times.append(delta_time)
-
-    with open('motor_movment_test_400.csv','w') as file:
-        file.write('power,time\n')
-        for i in range(len(powers)):
-            file.write(str(powers[i]) + ',' + str(times[i]))
-            file.write('\n')
+    all_tachos = []
+    try:
+        for tacho in range(5, max_tacho, 10):
+            tacholist = ([], [], [])
+            for power in range(20, 130, 10):
+                start_time = time.time()
+                m.turn(power, tacho)
+                m.turn(power * -1, tacho)
+                delta_time = time.time() - start_time
+                tacholist[0].append(tacho)
+                tacholist[1].append(power)
+                tacholist[2].append(delta_time / tacho / 2)
+            all_tachos.append(tacholist)
+            m.idle()
+            time.sleep(5)
+    except:
+        pass
+    pickle.dump(all_tachos, open('calibration_MM.p', 'wb'))
 
     b.sock.close()
 except:

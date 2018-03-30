@@ -5,7 +5,9 @@ import time
 
 class NeggxtBotGCodeParser:
 
-    def __init__(self, rotation_motor, moving_motor, pulling_motor, egg_height=3.5, egg_width=4.5, full_rotation=1200, max_movement=200, max_pull_height=400, fast_pull_height=300):
+    def __init__(self, rotation_motor, moving_motor, pulling_motor, egg_height=100, egg_width=128.5, full_rotation=1200, max_movement=200, max_pull_height=400, fast_pull_height=300,
+    powertimes_x=[(30, 0.003498308261235555), (60, 0.0017978965242703756), (120, 0.0014470117290814718)],
+    powertimes_y=[(30, 0.0041418087482452395), (60, 0.002620434761047363), (120, 0.0021501076221466064)]):
         self.m_x = rotation_motor
         self.m_y = moving_motor
         self.m_pull = pulling_motor
@@ -15,6 +17,8 @@ class NeggxtBotGCodeParser:
         self.max_movement = max_movement
         self.max_pull_height = max_pull_height
         self.fast_pull_height = fast_pull_height
+        self.m_x_func = MotorExpFunction(powertimes_x)
+        self.m_y_func = MotorExpFunction(powertimes_y)
         self.x = 0
         self.y = 0
         self.sets = {'G': 0.0, 'X': 0.0, 'Y': 0.0, 'F': 1.0}
@@ -155,7 +159,7 @@ class NeggxtBotGCodeParser:
             delta_time_x = time.time() - start_time
 
             # scale for 1 tacho degree
-            times.append((delta_time_x / self.full_rotation, delta_time_y / self.max_movement))
+            times.append((delta_time_x / self.full_rotation / 2, delta_time_y / self.max_movement / 2))
         # pass the corresponding (power, time) tuples to the function generator
         self.m_x_func = MotorExpFunction([(powers[0], times[0][0]), (powers[1], times[1][0]), (powers[2], times[2][0])])
         self.m_y_func = MotorExpFunction([(powers[0], times[0][1]), (powers[1], times[1][1]), (powers[2], times[2][1])])
