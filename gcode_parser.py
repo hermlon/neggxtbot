@@ -17,8 +17,8 @@ class NeggxtBotGCodeParser:
         self.max_movement = max_movement
         self.max_pull_height = max_pull_height
         self.fast_pull_height = fast_pull_height
-        self.m_x_func = MotorExpFunction(powertimes_x)
-        self.m_y_func = MotorExpFunction(powertimes_y)
+        #self.m_x_func = MotorExpFunction(powertimes_x)
+        #self.m_y_func = MotorExpFunction(powertimes_y)
         self.x = 0
         self.y = 0
         self.relative = False
