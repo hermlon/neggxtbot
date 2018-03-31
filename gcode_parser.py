@@ -21,10 +21,13 @@ class NeggxtBotGCodeParser:
         self.m_y_func = MotorExpFunction(powertimes_y)
         self.x = 0
         self.y = 0
+        self.relative = False
         self.sets = {'G': 0.0, 'X': 0.0, 'Y': 0.0, 'F': 1.0}
         self.codes = {
             '0': self.g_0,
-            '1': self.g_1
+            '1': self.g_1,
+            '90': self.set_absolut,
+            '91': self.set_relative
         }
 
     def g_0(self, args):
@@ -40,6 +43,12 @@ class NeggxtBotGCodeParser:
             self.pen_down()
         self.update(args)
         self.move()
+
+    def set_absolut(self, args):
+        self.relative = False
+
+    def set_relative(self, args):
+        self.relative = True
 
     # moves the pen to the (new) posision in self.sets
     def move(self):
@@ -95,6 +104,12 @@ class NeggxtBotGCodeParser:
     def movment_by_y(self, delta_y):
         return delta_y / self.egg_height * self.max_movement
 
+    def exec_file(self, filename):
+        print('loading file: %s' % filename)
+        with open(filename, 'r') as file:
+            for line in file:
+                self.exec(line)
+
     # excecute a GCode command
     def exec(self, cmd):
         self.parse(cmd)
@@ -104,8 +119,12 @@ class NeggxtBotGCodeParser:
         for arg in args:
             code = arg[0]
             if code in self.sets:
-                # update the set with the following value converted to float if the name is valid (meaning contained in the initial sets)
-                self.sets[code] = float(arg[1:])
+                if self.relative:
+                    # relative movment means values are added to the previous value
+                    self.sets[code] += float(arg[1:])
+                else:
+                    # update the set with the following value converted to float if the name is valid (meaning contained in the initial sets)
+                    self.sets[code] = float(arg[1:])
             else:
                 raise GCodeParseError('Unknown argument name: %s' % code)
 
@@ -167,20 +186,19 @@ class NeggxtBotGCodeParser:
 class MotorExpFunction():
 
     # powertimes: list of three (power, time) tuples
-    def __init__(self, powertimes):
-        self.powertimes = powertimes
-        # the offset in time of the function is the time it took for the largest power
-        self.n = powertimes[-1][1]
-        # Exponential function: t = m * a^p + n
-        # (I)   t_1 = m * a^p_1 + n
-        # (II)   t_2 = m * a^p_2 + n
-        # (t_1 - n) / a^p_1 = (t_2 - n) / a^p_2
-        # (t_1 - n) / (t_2 - n) = a^p_1 / a^p_2
-        # (t_1 - n) / (t_2 - n) = a^(p_1 - p_2)
-        # a = ((t_1 - n) / (t_2 - n))^(1/(p_1 - p_2))
-        self.a = math.pow((powertimes[0][1] - self.n) / (powertimes[1][1] - self.n), 1/(powertimes[0][0] - powertimes[1][0]))
-        # m = (t_1 - n) / (a^p_1)
-        self.m = (powertimes[0][1] - self.n) / math.pow(self.a, powertimes[0][0])
+    def __init__(self, p_1, p_2):
+        x_1 = p_1[0]
+        x_2 = p_2[0]
+        y_1 = p_1[1]
+        y_2 = p_2[1]
+        z_1 = p_1[2]
+        z_2 = p_2[2]
+        self.n = 0.002997372
+        self.m = 0.001
+        xq_1 = x_1 ** 2
+        xq_2 = x_2 ** 2
+        self.b = (z_1 * xq_1 - self.n * xq_1 + self.n * xq_2 - z_1 * xq_2) / (-xq_2 * math.pow(self.m, y_1) + xq_1 * math.pow(self.m, y_2))
+        self.a = (z_1 - self.b * math.pow(self.m, y_1) - self.n) / xq_1
 
     # power to drive one tacho degree in one second
     def power_per_time(self):
