@@ -17,12 +17,13 @@ class NeggxtBotGCodeParser:
         self.max_movement = max_movement
         self.max_pull_height = max_pull_height
         self.fast_pull_height = fast_pull_height
-        self.m_x_func = MotorExpFunction(powertimes_x)
-        self.m_y_func = MotorExpFunction(powertimes_y)
+        #self.m_x_func = MotorExpFunction(powertimes_x)
+        #self.m_y_func = MotorExpFunction(powertimes_y)
         self.x = 0
         self.y = 0
+        self.is_pen_down = False
         self.relative = False
-        self.sets = {'G': 0.0, 'X': 0.0, 'Y': 0.0, 'F': 1.0}
+        self.sets = {'X': 0.0, 'Y': 0.0, 'F': 30.0}
         self.codes = {
             '0': self.g_0,
             '1': self.g_1,
@@ -31,16 +32,12 @@ class NeggxtBotGCodeParser:
         }
 
     def g_0(self, args):
-        old_movment = self.sets['G']
-        if old_movment == 1:
-            self.pen_up()
+        self.pen_up()
         self.update(args)
         self.move()
 
     def g_1(self, args):
-        old_movment = self.sets['G']
-        if old_movment == 0:
-            self.pen_down()
+        self.pen_down()
         self.update(args)
         self.move()
 
@@ -117,23 +114,24 @@ class NeggxtBotGCodeParser:
     # Only called with G0 or G1! Update all the sets with the new values from the arguments. Not appearing values are being kept.
     def update(self, args):
         for arg in args:
-            code = arg[0]
-            if code in self.sets:
+            # ok, we accept lazy GCode writers...
+            arg_name = arg[0].upper()
+            if arg_name in self.sets:
                 if self.relative:
                     # relative movment means values are added to the previous value
-                    self.sets[code] += float(arg[1:])
+                    self.sets[arg_name] += float(arg[1:])
                 else:
                     # update the set with the following value converted to float if the name is valid (meaning contained in the initial sets)
-                    self.sets[code] = float(arg[1:])
+                    self.sets[arg_name] = float(arg[1:])
             else:
-                raise GCodeParseError('Unknown argument name: %s' % code)
+                raise GCodeParseError('Unknown argument name: %s' % arg_name)
 
     def parse(self, cmd):
         # split arguments after space
         args = cmd.split()
 
-        # GCode
-        if args[0][0] == 'G':
+        # GCode (we accept g)
+        if args[0][0].upper() == 'G':
             # the code is the remaining of the first argument without the G
             code = args[0][1:]
 
@@ -147,18 +145,21 @@ class NeggxtBotGCodeParser:
 
                 # select the corresponding action for the code, if not found raise an error
                 code_function = self.codes.get(code, parse_exception)
-                # execute the function and pass all the args
-                code_function(args)
-        else:
-            raise GCodeParseError('No other commands than G accepted')
+                # execute the function and pass all the args except G
+                code_function(args[1:])
+        # Do nothing, could be comment or unknown command
 
     # move the pen down to start drawing
     def pen_down(self):
-        self.m_pull.turn(-30, self.max_pull_height)
+        if not self.is_pen_down:
+            self.m_pull.turn(-30, self.max_pull_height)
+            self.is_pen_down = True
 
     # move the pen up to stop drawing
     def pen_up(self):
-        self.m_pull.turn(30, self.max_pull_height)
+        if self.is_pen_down:
+            self.m_pull.turn(30, self.max_pull_height)
+            self.is_pen_down = False
 
     # finds out the power the motors need to move in a certain time and calculates the parameters of the exponential function
     def calibrate(self):
