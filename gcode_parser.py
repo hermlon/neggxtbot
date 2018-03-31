@@ -5,7 +5,7 @@ import time
 
 class NeggxtBotGCodeParser:
 
-    def __init__(self, rotation_motor, moving_motor, pulling_motor, egg_height=100, egg_width=128.5, full_rotation=1200, max_movement=200, max_pull_height=400, fast_pull_height=300,
+    def __init__(self, rotation_motor, moving_motor, pulling_motor, egg_height=100, egg_width=128.5, full_rotation=1200, max_movement=220, max_pull_height=400, fast_pull_height=300,
     powertimes_x=[(30, 0.003498308261235555), (60, 0.0017978965242703756), (120, 0.0014470117290814718)],
     powertimes_y=[(30, 0.0041418087482452395), (60, 0.002620434761047363), (120, 0.0021501076221466064)]):
         self.m_x = rotation_motor
@@ -102,10 +102,18 @@ class NeggxtBotGCodeParser:
         return delta_y / self.egg_height * self.max_movement
 
     def exec_file(self, filename):
-        print('loading file: %s' % filename)
+        print('Loading file: %s' % filename)
+        starttime = time.time()
         with open(filename, 'r') as file:
             for line in file:
                 self.exec(line)
+
+        # move to initial position
+        self.pen_up()
+        self.exec('G90')
+        self.exec('G0 X0')
+        self.exec('G0 Y0')
+        print('Finished drawing. Time: %s min' % str(int((time.time() - starttime) / 60)))
 
     # excecute a GCode command
     def exec(self, cmd):
@@ -183,6 +191,10 @@ class NeggxtBotGCodeParser:
         # pass the corresponding (power, time) tuples to the function generator
         self.m_x_func = MotorExpFunction([(powers[0], times[0][0]), (powers[1], times[1][0]), (powers[2], times[2][0])])
         self.m_y_func = MotorExpFunction([(powers[0], times[0][1]), (powers[1], times[1][1]), (powers[2], times[2][1])])
+
+    def reset_movment(self):
+        self.m_y.weak_turn(-60, self.max_movement)
+        self.m_y.idle()
 
 class MotorExpFunction():
 
