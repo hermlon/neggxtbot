@@ -105,10 +105,18 @@ class NeggxtBotGCodeParser:
         return delta_y / self.egg_height * self.max_movement
 
     def exec_file(self, filename):
-        print('loading file: %s' % filename)
+        print('Loading file: %s' % filename)
+        starttime = time.time()
         with open(filename, 'r') as file:
             for line in file:
                 self.exec(line)
+
+        # move to initial position
+        self.pen_up()
+        self.exec('G90')
+        self.exec('G0 X0')
+        self.exec('G0 Y0')
+        print('Finished drawing. Time: %s min' % str(int((time.time() - starttime) / 60)))
 
     # excecute a GCode command
     def exec(self, cmd):
@@ -190,6 +198,10 @@ class NeggxtBotGCodeParser:
         self.m_x_func = MotorExpFunction([(powers[0], times[0][0]), (powers[1], times[1][0]), (powers[2], times[2][0])])
         self.m_y_func = MotorExpFunction([(powers[0], times[0][1]), (powers[1], times[1][1]), (powers[2], times[2][1])])
         """
+
+    def reset_movment(self):
+        self.m_y.weak_turn(-60, self.max_movement)
+        self.m_y.idle()
 
 class MotorExpFunction():
 

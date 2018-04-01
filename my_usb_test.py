@@ -26,6 +26,8 @@ try:
 
     g = NeggxtBotGCodeParser(m_c, m_a, m_b)
 
+    def draw():
+        g.exec_file('patterns/quadratwelle.gcode')
     import pdb; pdb.set_trace()
 
     b.sock.close()
