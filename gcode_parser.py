@@ -186,20 +186,19 @@ class NeggxtBotGCodeParser:
 
 class MotorExpFunction():
 
-    # powertimes: list of three (power, time) tuples
-    def __init__(self, p_1, p_2):
-        x_1 = p_1[0]
-        x_2 = p_2[0]
-        y_1 = p_1[1]
-        y_2 = p_2[1]
-        z_1 = p_1[2]
-        z_2 = p_2[2]
-        self.n = 0.002997372
-        self.m = 0.001
-        xq_1 = x_1 ** 2
-        xq_2 = x_2 ** 2
-        self.b = (z_1 * xq_1 - self.n * xq_1 + self.n * xq_2 - z_1 * xq_2) / (-xq_2 * math.pow(self.m, y_1) + xq_1 * math.pow(self.m, y_2))
-        self.a = (z_1 - self.b * math.pow(self.m, y_1) - self.n) / xq_1
+    # (tacho, power, time)
+    def __init__(self, tp_1, tp_2, pp_3, pp_4, n):
+        self.n = n
+        self.a, self.b = self.calc_params((tp_1[2], tp_1[0]), (tp_2[2], tp_2[0]))
+        self.c, self.d = calc_params((pp_1[2], pp_1[1]), (pp_2[2], pp_2[1]))
+
+    def calc_params(self, p_1, p_2, n):
+        b = math.pow((p_1[0] - self.n) / (p_2[0] - self.n), 1 / (p_1[1] - p_2[1]))
+        a = (p_1[0] - self.n) / math.pow(b, p_1[1])
+        return (a, b)
+
+    def calc_time(self, tacho, power):
+        return self.a * math.pow(self.b, tacho) + self.c * math.pow(self.d, power) + self.n
 
     # power to drive one tacho degree in one second
     def power_per_time(self):
