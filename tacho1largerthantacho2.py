@@ -31,16 +31,16 @@ motor_func = MotorExpFunction(t_p_1, t_p_2, p_p_1, p_p_2, n)
 
 x = y = np.arange(0, 200, 5)
 X, Y = np.meshgrid(x, y)
-zs = np.array([motor_func.calc_time(x,y) for x,y in zip(np.ravel(X), np.ravel(Y))])
+zs = np.array([motor_func.calc_power_by_tacho(x,y, 30.0) for x,y in zip(np.ravel(X), np.ravel(Y))])
 Z = zs.reshape(X.shape)
 
 ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
                        linewidth=0, antialiased=False)
-show_data(ax, calibration_data)
+#show_data(ax, calibration_data)
 
-ax.set_xlabel('X Tacho')
-ax.set_ylabel('Y Power')
-ax.set_zlabel('Z Time')
+ax.set_xlabel('X Tacho 1')
+ax.set_ylabel('Y Tacho 2')
+ax.set_zlabel('Z Power needed for Tacho 2')
 
 ax.legend()
 plt.show()

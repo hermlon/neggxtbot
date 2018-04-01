@@ -28,7 +28,6 @@ try:
 
     import pdb; pdb.set_trace()
 
-
     b.sock.close()
 except:
     print("Error while running test:")

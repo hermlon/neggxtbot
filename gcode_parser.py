@@ -6,8 +6,11 @@ import time
 class NeggxtBotGCodeParser:
 
     def __init__(self, rotation_motor, moving_motor, pulling_motor, egg_height=100, egg_width=128.5, full_rotation=1200, max_movement=200, max_pull_height=400, fast_pull_height=300,
-    powertimes_x=[(30, 0.003498308261235555), (60, 0.0017978965242703756), (120, 0.0014470117290814718)],
-    powertimes_y=[(30, 0.0041418087482452395), (60, 0.002620434761047363), (120, 0.0021501076221466064)]):
+        t_p_1=(105, 120, 0.0044429075150262745),
+        t_p_2=(25, 120, 0.013160743713378907),
+        p_p_1=(195, 40, 0.003705470378582294),
+        p_p_2=(195, 20, 0.005971569281357985),
+        n=0.0029973720892881735):
         self.m_x = rotation_motor
         self.m_y = moving_motor
         self.m_pull = pulling_motor
@@ -17,8 +20,7 @@ class NeggxtBotGCodeParser:
         self.max_movement = max_movement
         self.max_pull_height = max_pull_height
         self.fast_pull_height = fast_pull_height
-        #self.m_x_func = MotorExpFunction(powertimes_x)
-        #self.m_y_func = MotorExpFunction(powertimes_y)
+        self.m_func = MotorExpFunction(t_p_1, t_p_2, p_p_1, p_p_2, n)
         self.x = 0
         self.y = 0
         self.is_pen_down = False
@@ -67,13 +69,13 @@ class NeggxtBotGCodeParser:
         tacho_y = self.movment_by_y(abs(delta_y))
 
         if delta_x != 0 and delta_y != 0:
-            # which one needs more power? the more power you need to drive one tacho degree in a second (=the harder) and the more tacho degrees you have to drive the more power you need -> this larger power is limited to self.sets['F']
-            if self.m_x_func.power_per_time() * tacho_x > self.m_y_func.power_per_time() * tacho_y:
+            # which one needs more power? the one who has to move further! abs: movment doesn't care about the direction!!!
+            if abs(tacho_x) > abs(tacho_y):
                 power_x = self.sets['F']
-                power_y = self.m_y_func.calc_power_by_tacho(tacho_x, tacho_y, power_x)
+                power_y = self.m_func.calc_power_by_tacho(tacho_x, tacho_y, power_x)
             else:
                 power_y = self.sets['F']
-                power_x = self.m_x_func.calc_power_by_tacho(tacho_y, tacho_x, power_y)
+                power_x = self.m_func.calc_power_by_tacho(tacho_y, tacho_x, power_y)
 
             power_x = int(power_x * int(delta_x) / abs(delta_x))
             power_y = int(power_y * int(delta_y) / abs(delta_y))
@@ -92,6 +94,7 @@ class NeggxtBotGCodeParser:
     def turn_motor(self, motor, power, tacho):
         print('power: ' + str(power) + ' tacho: ' + str(tacho))
         motor.turn(power, tacho)
+        #motor.turn(30, 30)
 
     # returns the tacho degrees the motor has to rotate to draw delta_x cm. The egg is estimated as a cylinder with a constant radius egg_width
     def rotation_by_x(self, delta_x):
@@ -163,6 +166,9 @@ class NeggxtBotGCodeParser:
 
     # finds out the power the motors need to move in a certain time and calculates the parameters of the exponential function
     def calibrate(self):
+        # TODO: Update to new method!
+        pass
+        """
         times = []
         powers = [30, 60, 120]
         for power in powers:
@@ -183,16 +189,17 @@ class NeggxtBotGCodeParser:
         # pass the corresponding (power, time) tuples to the function generator
         self.m_x_func = MotorExpFunction([(powers[0], times[0][0]), (powers[1], times[1][0]), (powers[2], times[2][0])])
         self.m_y_func = MotorExpFunction([(powers[0], times[0][1]), (powers[1], times[1][1]), (powers[2], times[2][1])])
+        """
 
 class MotorExpFunction():
 
     # (tacho, power, time)
-    def __init__(self, tp_1, tp_2, pp_3, pp_4, n):
+    def __init__(self, tp_1, tp_2, pp_1, pp_2, n):
         self.n = n
         self.a, self.b = self.calc_params((tp_1[2], tp_1[0]), (tp_2[2], tp_2[0]))
-        self.c, self.d = calc_params((pp_1[2], pp_1[1]), (pp_2[2], pp_2[1]))
+        self.c, self.d = self.calc_params((pp_1[2], pp_1[1]), (pp_2[2], pp_2[1]))
 
-    def calc_params(self, p_1, p_2, n):
+    def calc_params(self, p_1, p_2):
         b = math.pow((p_1[0] - self.n) / (p_2[0] - self.n), 1 / (p_1[1] - p_2[1]))
         a = (p_1[0] - self.n) / math.pow(b, p_1[1])
         return (a, b)
@@ -200,12 +207,13 @@ class MotorExpFunction():
     def calc_time(self, tacho, power):
         return self.a * math.pow(self.b, tacho) + self.c * math.pow(self.d, power) + self.n
 
-    # power to drive one tacho degree in one second
-    def power_per_time(self):
-        return math.log((1 - self.n) / self.m, self.a)
-
-    def calc_power_by_tacho(self, tacho_1, tacho_2, power_1):
-        return math.log(((self.m * math.pow(self.a, power_1) + self.n) * tacho_1 / tacho_2 - self.n) / self.n, self.a)
+    # don't know why but when I switch tacho_1 and tacho_2 it seems to work. Must have messed up somewhere
+    def calc_power_by_tacho(self, tacho_2, tacho_1, power_1):
+        # import pdb; pdb.set_trace()
+        #try:
+        return math.log((self.a * math.pow(self.b, tacho_1) + self.c * math.pow(self.d, power_1) - self.a * math.pow(self.b, tacho_2)) / self.c, self.d)
+        #except:
+        #    return -1
 
 class GCodeParseError(Exception):
     pass
